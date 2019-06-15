@@ -1,28 +1,30 @@
 # magic-mirror.py
+# Modified by Ferreira Joao Alexandre (TT-CH/ERS)
 
-from tkinter import *
+from tkinter import * # to show a native graphical interface (GUI)
 import locale
 import threading
 import time
-import requests
-import json
+import requests # to perform HTTP requests
+import json # to parse JSON responses from HTTP requests
 import traceback
-import feedparser
+import feedparser # to parse RSS feeds
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk # to display images
 from contextlib import contextmanager
 
 LOCALE_LOCK = threading.Lock()
 
-ui_locale = '' # e.g. 'fr_FR' fro French, '' as default
-time_format = 12 # 12 or 24
+# TODO feel free to change here some of the parameters to understand how this app works
+ui_locale = 'pt_PT' # e.g. 'fr_FR' fro French, '' as default
+time_format = 24 # 12 or 24
 date_format = "%b %d, %Y" # check python doc for strftime() for options
-news_country_code = 'us'
+news_country_code = 'pt-PT' # look at the google news URL some lines below to understand what should you put here
 weather_api_token = '2c212b3a5c7bfed52b91b0f5f1d4c8cb' # create account at https://darksky.net/dev/
-weather_lang = 'en' # see https://darksky.net/dev/docs/forecast for full list of language parameters values
-weather_unit = 'us' # see https://darksky.net/dev/docs/forecast for full list of unit parameters values
-latitude = None # Set this if IP location lookup does not work for you (must be a string)
-longitude = None # Set this if IP location lookup does not work for you (must be a string)
+weather_lang = 'pt' # see https://darksky.net/dev/docs/forecast for full list of language parameters values
+weather_unit = 'si' # see https://darksky.net/dev/docs/forecast for full list of unit parameters values
+latitude = '40.6421543' # Set this if IP location lookup does not work for you (must be a string)
+longitude = '-8.6495847' # Set this if IP location lookup does not work for you (must be a string)
 xlarge_text_size = 94
 large_text_size = 48
 medium_text_size = 28
@@ -55,6 +57,9 @@ icon_lookup = {
     'hail': "assests/Hail.png"  # hail
 }
 
+"""
+  * This class defines the information that the weather widget will show 
+"""
 class Weather(Frame):
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, bg='black')
@@ -77,6 +82,7 @@ class Weather(Frame):
         self.locationLbl.pack(side=TOP, anchor=W)
         self.get_weather()
 
+    # get the machine's IP address (where this script is running)
     def get_ip(self):
         try:
             ip_url = "http://jsonip.com/"
@@ -87,9 +93,11 @@ class Weather(Frame):
             traceback.print_exc()
             return "Error: %s. Cannot get ip." % e
 
+    # get the weather from DarkSky (you can change this to another provider like IPMA or AccuWeather if you prefer)
     def get_weather(self):
         try:
-
+            # in case you didn't define any coordinates above, this will try to get your approximate
+            # coordinates, based on your IP address
             if latitude is None and longitude is None:
                 # get location
                 location_req_url = "http://freegeoip.net/json/%s" % self.get_ip()
@@ -101,7 +109,7 @@ class Weather(Frame):
 
                 location2 = "%s, %s" % (location_obj['city'], location_obj['region_code'])
 
-                # get weather
+                # the effective call to the weather provider
                 weather_req_url = "https://api.darksky.net/forecast/%s/%s,%s?lang=%s&units=%s" % (weather_api_token, lat,lon,weather_lang,weather_unit)
             else:
                 location2 = ""
@@ -119,9 +127,11 @@ class Weather(Frame):
             icon_id = weather_obj['currently']['icon']
             icon2 = None
 
+            # get the icon to display
             if icon_id in icon_lookup:
                 icon2 = icon_lookup[icon_id]
 
+            # adjust the icon to show it in the screen
             if icon2 is not None:
                 if self.icon != icon2:
                     self.icon = icon2
@@ -136,6 +146,7 @@ class Weather(Frame):
                 # remove image
                 self.iconLbl.config(image='')
 
+            # store the weather information in the internal structure
             if self.currently != currently2:
                 self.currently = currently2
                 self.currentlyLbl.config(text=currently2)
@@ -162,7 +173,9 @@ class Weather(Frame):
     def convert_kelvin_to_fahrenheit(kelvin_temp):
         return 1.8 * (kelvin_temp - 273) + 32
 
-
+"""
+  * This class defines the information that the news widget will show 
+"""
 class News(Frame):
     def __init__(self, parent, *args, **kwargs):
         Frame.__init__(self, parent, *args, **kwargs)
@@ -174,15 +187,16 @@ class News(Frame):
         self.headlinesContainer.pack(side=TOP)
         self.get_headlines()
 
+    # get the news' headlines for the country you've defined at the top of this Python script
     def get_headlines(self):
         try:
             # remove all children
             for widget in self.headlinesContainer.winfo_children():
                 widget.destroy()
             if news_country_code == None:
-                headlines_url = "https://news.google.com/news?ned=us&output=rss"
+                headlines_url = "https://news.google.com/rss?hl=ko" # why not Korea's news? :)
             else:
-                headlines_url = "https://news.google.com/news?ned=%s&output=rss" % news_country_code
+                headlines_url = "https://news.google.com/rss?hl=%s" % news_country_code
 
             feed = feedparser.parse(headlines_url)
 
@@ -195,7 +209,10 @@ class News(Frame):
 
         self.after(600000, self.get_headlines)
 
-
+"""
+  * This is a class that defines objects that will hold the headlines of the 
+  * news that were retrieved.
+"""
 class NewsHeadline(Frame):
     def __init__(self, parent, event_name=""):
         Frame.__init__(self, parent, bg='black')
@@ -209,10 +226,28 @@ class NewsHeadline(Frame):
         self.iconLbl.image = photo
         self.iconLbl.pack(side=LEFT, anchor=N)
 
-        self.eventName = event_name
+        # the headlines are limited in size to 92 chars, but you can remove that limitation
+        MAX_SIZE = 92
+        if len(event_name) > MAX_SIZE:
+            self.eventName = event_name[:MAX_SIZE] + '(...)' 
+        else:
+            self.eventName = event_name
         self.eventNameLbl = Label(self, text=self.eventName, font=('Helvetica', small_text_size), fg="white", bg="black")
         self.eventNameLbl.pack(side=LEFT, anchor=N)
 
+"""
+  * TODO This is the perfect spot to create your widget!
+  * One possible way to do that is to create a class, define everything you want there 
+  * and then evoke one object at FullScreenWindow.init()
+"""
+
+
+
+
+"""
+  * The class that defines the GUI (i.e., graphical user interface)
+  * Try to tinker with this to change the appearance of the window
+"""
 class FullscreenWindow:
 
     def __init__(self):
@@ -223,15 +258,26 @@ class FullscreenWindow:
         self.topFrame.pack(side = TOP, fill=BOTH, expand = YES)
         self.bottomFrame.pack(side = BOTTOM, fill=BOTH, expand = YES)
         self.state = False
+        # While this app is running, press <Enter> to put the app in full screen
         self.tk.bind("<Return>", self.toggle_fullscreen)
+        # While this app is running, press <Esc> to remove the app from full screen
         self.tk.bind("<Escape>", self.end_fullscreen)
-        # weather
+        
+        # create an object 'weather' inside the GUI, and set its position
         self.weather = Weather(self.topFrame)
         self.weather.pack(side=LEFT, anchor=N, padx=100, pady=60)
-        # news
+        
+        # create an object 'news' inside the GUI and set its position
         self.news = News(self.bottomFrame)
         self.news.pack(side=LEFT, anchor=S, padx=100, pady=60)
 
+        # TODO create more objects here and assign your widget
+        #  Examples of widgets you can create:
+        # self.calendar = Calendar ...
+        # self.clock = Clock ...
+        # self.radio = LastMusicThatPlayedOnRadioComercial
+        # self.word = WordOfTheDay
+        # self.yourWidget = MagicChimpDoingStuff
 
     def toggle_fullscreen(self, event=None):
         self.state = not self.state  # Just toggling the boolean
